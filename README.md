@@ -5,6 +5,10 @@ It answers retail-sales questions by calling tools on an **MCP server**. Those t
 layer** over **Postgres**, run guarded **text-to-SQL**, and **forecast** with Holt-Winters. Identity is
 enforced end to end: row-level security, role-based tools, and an aggregate-only role.
 
+> ### ▶ [Interactive walkthrough: Agent Loop Anatomy](https://datagary.github.io/agentic-analytics-demo/docs/agent-loop-anatomy.html)
+> Step through real requests hop by hop on the architecture and agent-loop diagrams, see who can see what,
+> and which layer stops each kind of attack. No setup needed. (Source: [docs/agent-loop-anatomy.html](docs/agent-loop-anatomy.html).)
+
 ```
 Browser ─login─▶ agent :8000  (FastAPI + Chainlit UI + LangGraph)  ──▶ Ollama on host (gemma4:e2b)
                    │ per-turn JWT {sub, role, region_id}
