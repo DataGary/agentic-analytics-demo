@@ -1,0 +1,58 @@
+# Single source of truth for authorization.
+# Enforced by: the agent (which tools are bound to the LLM), the MCP server (every call),
+# and mirrored by Cube's queryRewrite (cube/cube.js) and Postgres RLS (db/init/02_roles_rls.sql).
+#
+# row_scope:    "all" or "region"  -> which rows (row-level security)
+# tools:        which MCP tools the role may call
+# members:      which semantic-layer members (Cube) the role may reference; "*" = any
+# min_granularity: coarsest-allowed time bucket floor (null = any, incl. day)
+# min_group_orders: groups with fewer orders are suppressed (k-anonymity style); 0 = off
+# mask_pii:     mask customer emails in results
+
+roles:
+  admin:
+    row_scope: all
+    tools: [describe_semantic_model, query_metrics, forecast, get_sql_schema, run_sql]
+    members: ["*"]
+    min_granularity: null
+    min_group_orders: 0
+    mask_pii: false
+
+  analyst:
+    row_scope: all
+    tools: [describe_semantic_model, query_metrics, forecast, get_sql_schema, run_sql]
+    members: ["*"]
+    min_granularity: null
+    min_group_orders: 0
+    mask_pii: true
+
+  regional_manager:
+    row_scope: region
+    tools: [describe_semantic_model, query_metrics, forecast]
+    members: ["*"]
+    min_granularity: null
+    min_group_orders: 0
+    mask_pii: true
+
+  sales_viewer:
+    row_scope: all
+    tools: [describe_semantic_model, query_metrics, forecast]
+    members:
+      - sales.revenue
+      - sales.units
+      - sales.orders
+      - sales.avg_order_value
+      - sales.sale_date
+      - regions.name
+      - products.category
+    min_granularity: week
+    min_group_orders: 5
+    mask_pii: true
+
+# Demo users. Passwords are all "demo" (bcrypt-hashed at startup); a real system uses an IdP.
+users:
+  alice: {role: admin,            region_id: null, display: "Alice (Admin)"}
+  bob:   {role: analyst,          region_id: null, display: "Bob (Analyst)"}
+  carol: {role: regional_manager, region_id: 1,    display: "Carol (East manager)"}
+  dave:  {role: regional_manager, region_id: 2,    display: "Dave (West manager)"}
+  erin:  {role: sales_viewer,     region_id: null, display: "Erin (Aggregates only)"}

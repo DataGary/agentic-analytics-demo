@@ -1,0 +1,107 @@
+# Full stack: Postgres (+ one-shot seed) -> Cube semantic layer -> MCP server -> agent (API + UI), plus Phoenix tracing.
+# Ollama runs on the host (Docker on macOS has no GPU access); containers reach it via host.docker.internal.
+
+x-app-env: &app-env
+  JWT_SECRET: ${JWT_SECRET}
+  OTEL_ENDPOINT: http://phoenix:6006/v1/traces
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: app_owner
+      POSTGRES_PASSWORD: ${APP_OWNER_PASSWORD}
+      POSTGRES_DB: retail
+      MCP_READER_PASSWORD: ${MCP_READER_PASSWORD}
+      CUBE_READER_PASSWORD: ${CUBE_READER_PASSWORD}
+      AUDIT_WRITER_PASSWORD: ${AUDIT_WRITER_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d:ro
+    ports: ["${PG_PORT:-5432}:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app_owner -d retail"]
+      interval: 3s
+      retries: 20
+
+  seed:
+    build: .
+    command: ["python", "db/seed.py"]
+    environment:
+      PG_ADMIN_DSN: postgresql://app_owner:${APP_OWNER_PASSWORD}@postgres:5432/retail
+    depends_on:
+      postgres: {condition: service_healthy}
+    restart: "no"
+
+  cube:
+    image: cubejs/cube:v1.7.50
+    environment:
+      CUBEJS_DB_TYPE: postgres
+      CUBEJS_DB_HOST: postgres
+      CUBEJS_DB_NAME: retail
+      CUBEJS_DB_USER: cube_reader
+      CUBEJS_DB_PASS: ${CUBE_READER_PASSWORD}
+      CUBEJS_API_SECRET: ${JWT_SECRET}
+      CUBEJS_JWT_AUDIENCE: retail-analytics
+      CUBEJS_DEV_MODE: "false"
+      # Production Cube uses Cube Store for its cache/queue; in-memory is fine for one node.
+      CUBEJS_CACHE_AND_QUEUE_DRIVER: memory
+      CUBEJS_LOG_LEVEL: warn
+    volumes:
+      - ./cube/model:/cube/conf/model:ro
+      - ./cube/cube.js:/cube/conf/cube.js:ro
+      - ./config/policies.yaml:/cube/conf/policies.yaml:ro
+    ports: ["4000:4000"]
+    depends_on:
+      seed: {condition: service_completed_successfully}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/readyz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      retries: 30
+
+  mcp-server:
+    build: .
+    command: ["python", "-m", "mcp_server.server"]
+    environment:
+      <<: *app-env
+      PG_READER_DSN: postgresql://mcp_reader:${MCP_READER_PASSWORD}@postgres:5432/retail
+      PG_AUDIT_DSN: postgresql://audit_writer:${AUDIT_WRITER_PASSWORD}@postgres:5432/retail
+      CUBE_URL: http://cube:4000/cubejs-api/v1
+    ports: ["8001:8001"]
+    depends_on:
+      cube: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/healthz').status==200 else 1)"]
+      interval: 5s
+      retries: 20
+
+  agent:
+    build: .
+    command: ["uvicorn", "agent.api:app", "--host", "0.0.0.0", "--port", "8000"]
+    environment:
+      <<: *app-env
+      CHAINLIT_AUTH_SECRET: ${CHAINLIT_AUTH_SECRET}
+      PG_CHECKPOINT_DSN: postgresql://app_owner:${APP_OWNER_PASSWORD}@postgres:5432/agent_state
+      MCP_URL: http://mcp-server:8001/mcp
+      OLLAMA_URL: http://host.docker.internal:11434
+      MODEL_NAME: ${MODEL_NAME:-gemma4:e2b}
+      MODEL_REASONING: ${MODEL_REASONING:-true}
+      REQUIRE_SQL_APPROVAL: ${REQUIRE_SQL_APPROVAL:-true}
+      LLM_INPUT_GUARD: ${LLM_INPUT_GUARD:-false}
+      MAX_AGENT_STEPS: ${MAX_AGENT_STEPS:-8}
+    extra_hosts: ["host.docker.internal:host-gateway"]
+    ports: ["8000:8000"]
+    depends_on:
+      mcp-server: {condition: service_healthy}
+      phoenix: {condition: service_started}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/healthz').status==200 else 1)"]
+      interval: 10s
+      retries: 10
+
+  phoenix:
+    image: arizephoenix/phoenix:latest
+    ports: ["6006:6006"]
+
+volumes:
+  pgdata:

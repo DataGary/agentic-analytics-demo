@@ -1,0 +1,81 @@
+cubes:
+  - name: regions
+    sql_table: analytics.regions
+    title: Regions
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+        shown: true
+      - name: name
+        sql: name
+        type: string
+        description: Sales region (East, West, North, South).
+
+  - name: stores
+    sql_table: analytics.stores
+    title: Stores
+    joins:
+      - name: regions
+        sql: "{CUBE}.region_id = {regions}.id"
+        relationship: many_to_one
+    measures:
+      - name: count
+        type: count
+        description: Number of stores.
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: name
+        sql: name
+        type: string
+        description: Store name.
+      - name: city
+        sql: city
+        type: string
+
+  - name: products
+    sql_table: analytics.products
+    title: Products
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: name
+        sql: name
+        type: string
+        description: Product name.
+      - name: category
+        sql: category
+        type: string
+        description: Product category (Electronics, Home, Apparel, Grocery, Toys).
+
+  - name: customers
+    sql_table: analytics.customers
+    title: Customers
+    joins:
+      - name: regions
+        sql: "{CUBE}.region_id = {regions}.id"
+        relationship: many_to_one
+    measures:
+      - name: count
+        type: count_distinct
+        sql: id
+        description: Number of distinct customers.
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: name
+        sql: name
+        type: string
+      - name: email
+        # PII is masked in the semantic layer for everyone; admins can see raw email via run_sql.
+        # (no regex backreferences here: Cube parses sql as a JS template, where "\1" is an invalid escape)
+        sql: "left({CUBE}.email, 1) || '***@' || split_part({CUBE}.email, '@', 2)"
+        type: string

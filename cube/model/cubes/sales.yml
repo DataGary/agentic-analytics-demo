@@ -1,0 +1,53 @@
+cubes:
+  - name: sales
+    sql_table: analytics.sales
+    title: Sales
+    description: Order lines. One row per product per order. Use this cube for revenue, units and order counts.
+
+    joins:
+      - name: stores
+        sql: "{CUBE}.store_id = {stores}.id"
+        relationship: many_to_one
+      - name: products
+        sql: "{CUBE}.product_id = {products}.id"
+        relationship: many_to_one
+      - name: customers
+        sql: "{CUBE}.customer_id = {customers}.id"
+        relationship: many_to_one
+      - name: regions
+        sql: "{CUBE}.region_id = {regions}.id"
+        relationship: many_to_one
+
+    measures:
+      - name: revenue
+        sql: revenue
+        type: sum
+        format: currency
+        description: Total revenue in USD.
+      - name: units
+        sql: qty
+        type: sum
+        description: Number of units sold.
+      - name: orders
+        sql: order_id
+        type: count_distinct
+        description: Number of distinct orders.
+      - name: avg_order_value
+        sql: "{revenue} / NULLIF({orders}, 0)"
+        type: number
+        format: currency
+        description: Revenue divided by orders.
+
+    dimensions:
+      - name: id
+        sql: id
+        type: number
+        primary_key: true
+      - name: order_id
+        sql: order_id
+        type: number
+        description: Order identifier (row-level detail).
+      - name: sale_date
+        sql: sale_date
+        type: time
+        description: Date of the sale. Use with a granularity (day/week/month/quarter/year).
