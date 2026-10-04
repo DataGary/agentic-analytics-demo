@@ -54,3 +54,22 @@ def test_regional_role_requires_region():
     token = jwt.encode(claims, get_settings().jwt_secret, algorithm="HS256")
     with pytest.raises(PermissionError):
         verify_token(token)
+
+
+@pytest.mark.parametrize("value", ["", "short", "change-me-dev-only-secret-at-least-32-bytes"])
+def test_weak_secret_refused_outside_dev_mode(monkeypatch, value):
+    from common.config import require_secret
+
+    monkeypatch.setattr(get_settings(), "dev_mode", False)
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        require_secret("jwt_secret", value)
+    monkeypatch.setattr(get_settings(), "dev_mode", True)
+    assert require_secret("jwt_secret", value) == value
+
+
+def test_strong_secret_accepted(monkeypatch):
+    from common.config import require_secret
+
+    monkeypatch.setattr(get_settings(), "dev_mode", False)
+    strong = "q" * 48
+    assert require_secret("jwt_secret", strong) == strong

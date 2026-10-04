@@ -5,3 +5,4 @@ __pycache__/
 .chainlit/
 .files/
 evals/reports/
+.DS_Store

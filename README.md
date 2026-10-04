@@ -21,7 +21,7 @@ Phoenix :6006 ◀── traces from agent + mcp-server          audit.tool_calls
 ```bash
 # 1. prerequisites: Docker Desktop running, Ollama running, uv installed
 ollama pull gemma4:e2b
-cp .env.example .env            # change the secrets for anything beyond local play
+cp .env.example .env            # DEV_MODE=true: placeholder secrets, fine on localhost only
 
 # 2. start everything (first run seeds ~2 years of data)
 docker compose up -d --build
@@ -104,6 +104,18 @@ docker compose exec postgres psql -U app_owner -d retail \
 ```
 
 Reset everything: `docker compose down -v`.
+
+## Security notes for running it
+
+- Every port is published on `127.0.0.1` only, so nothing is reachable from your network.
+- `.env.example` sets `DEV_MODE=true`, which lets the placeholder secrets work. With `DEV_MODE=false`, the agent
+  and MCP server refuse to start unless `JWT_SECRET` and `CHAINLIT_AUTH_SECRET` are real (32+ characters,
+  not `change-me…`). Do that, and change the database passwords, before exposing any port.
+- The demo users (`demo` password) are for local play. See [docs/path-to-production.md](docs/path-to-production.md).
+
+## License
+
+MIT, see [LICENSE](LICENSE).
 
 ## About the model
 

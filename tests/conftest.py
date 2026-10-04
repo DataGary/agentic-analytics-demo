@@ -1,7 +1,13 @@
 import os
 import socket
+from pathlib import Path
 
 import pytest
+
+# Lets the unit tests run where no .env exists (e.g. CI). Only applied then: an env var would override
+# .env, and integration tests must sign tokens with the same secret as the running stack.
+if not (Path(__file__).resolve().parents[1] / ".env").exists():
+    os.environ.setdefault("JWT_SECRET", "test-only-secret-" + "x" * 32)
 
 
 def _port_open(host: str, port: int) -> bool:

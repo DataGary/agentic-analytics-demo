@@ -12,8 +12,12 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=ROOT / ".env", extra="ignore")
 
     # Shared secret for HS256 JWTs. Same value is Cube's CUBEJS_API_SECRET.
-    jwt_secret: str = "change-me-dev-only-secret-at-least-32-bytes"
+    # No default: a default would be public, and anyone who knows it can mint admin tokens.
+    jwt_secret: str = ""
     jwt_ttl_seconds: int = 900
+    chainlit_auth_secret: str = ""
+    # Allows the placeholder secrets from .env.example. Only safe while every port is bound to 127.0.0.1.
+    dev_mode: bool = False
 
     # Postgres: owner DSN (seed/migrations/checkpointer) and the low-privilege reader used by run_sql.
     pg_admin_dsn: str = "postgresql://app_owner:app_owner_pw@localhost:5432/retail"
@@ -44,3 +48,16 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def require_secret(name: str, value: str) -> str:
+    """Refuse missing, short or placeholder secrets unless DEV_MODE=true. Called where a secret is
+    used (not at settings load), so jobs that don't need it, like the seed, still run."""
+    weak = not value or len(value) < 32 or value.startswith("change-me")
+    if weak and not get_settings().dev_mode:
+        raise RuntimeError(
+            f"{name.upper()} is missing or a placeholder. Generate one with "
+            "`python3 -c 'import secrets; print(secrets.token_urlsafe(48))'`, "
+            "or set DEV_MODE=true for a local-only demo."
+        )
+    return value

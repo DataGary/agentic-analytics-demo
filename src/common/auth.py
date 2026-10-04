@@ -13,7 +13,7 @@ import bcrypt
 import jwt
 import yaml
 
-from common.config import get_settings
+from common.config import get_settings, require_secret
 
 GRANULARITY_ORDER = ["day", "week", "month", "quarter", "year"]
 
@@ -111,14 +111,14 @@ def mint_token(p: Principal, ttl: int | None = None) -> str:
         "exp": now + (ttl if ttl is not None else s.jwt_ttl_seconds),
         "aud": "retail-analytics",
     }
-    return jwt.encode(claims, s.jwt_secret, algorithm="HS256")
+    return jwt.encode(claims, require_secret("jwt_secret", s.jwt_secret), algorithm="HS256")
 
 
 def verify_token(token: str) -> Principal:
     """Raises jwt.InvalidTokenError (expired, tampered, wrong audience) or PermissionError."""
     claims = jwt.decode(
         token,
-        get_settings().jwt_secret,
+        require_secret("jwt_secret", get_settings().jwt_secret),
         algorithms=["HS256"],
         audience="retail-analytics",
         options={"require": ["sub", "role", "exp"]},

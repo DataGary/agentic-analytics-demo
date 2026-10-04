@@ -21,7 +21,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from agent.service import AgentService, sse
 from common.auth import Principal, authenticate, mint_token, verify_token
-from common.config import get_settings
+from common.config import get_settings, require_secret
 from common.logging import setup_logging
 from common.telemetry import setup_tracing
 
@@ -40,6 +40,9 @@ async def lifespan(_app: FastAPI):
     global _service
     setup_logging()
     setup_tracing("agent")
+    s = get_settings()
+    require_secret("jwt_secret", s.jwt_secret)
+    require_secret("chainlit_auth_secret", s.chainlit_auth_secret)
     try:
         from openinference.instrumentation.langchain import LangChainInstrumentor
 

@@ -19,6 +19,7 @@ from pydantic import Field
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from common.config import get_settings, require_secret
 from common.logging import setup_logging
 from common.telemetry import setup_tracing
 from mcp_server import cube_client, db
@@ -181,6 +182,7 @@ async def healthz(_request: Request) -> JSONResponse:
 
 
 def main() -> None:
+    require_secret("jwt_secret", get_settings().jwt_secret)
     setup_logging()
     setup_tracing("mcp-server")
     uvicorn.run(mcp.streamable_http_app(), host="0.0.0.0", port=8001, log_config=None)
